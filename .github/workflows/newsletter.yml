@@ -1,0 +1,24 @@
+name: newsletter
+
+on:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "Janela de dias pra buscar posts"
+        default: "7"
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run src/main.ts
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NEWSLETTER_TO: ${{ secrets.NEWSLETTER_TO }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days || '7' }}

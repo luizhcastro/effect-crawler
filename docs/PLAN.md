@@ -6,9 +6,9 @@ Decisões tomadas em 2026-09-10. Cada item tem a decisão e por quê. No fim, o 
 
 **Público: só eu, por enquanto.** Destinatários vêm da env var `NEWSLETTER_TO`, que aceita um ou vários emails separados por vírgula. Sem inscrição, descadastro ou gestão de lista no MVP. Quando virar newsletter com cadastro, a fonte da lista troca de env var pra banco, e o resto do fluxo não muda.
 
-**Fontes: lista fixa de feeds RSS/Atom.** Praticamente todo tech blog tem feed, então não precisa de crawler de HTML (que quebra toda hora). Lista inicial, URLs a validar na implementação:
+**Fontes: lista fixa de feeds RSS/Atom.** Praticamente todo tech blog tem feed, então não precisa de crawler de HTML (que quebra toda hora). Lista inicial (URLs validadas em 2026-09-10, estão em `src/feeds.ts`):
 
-- Empresas: Stripe Engineering, Cloudflare, Netflix TechBlog, Uber Engineering, Discord Engineering, Figma Engineering, Vercel, Shopify Engineering, GitHub Blog (engineering), Meta Engineering
+- Empresas: Stripe Engineering, Cloudflare, Netflix TechBlog, Discord Engineering, Figma, Vercel, Shopify Engineering, GitHub Blog (engineering), Meta Engineering. Uber ficou de fora: o feed bloqueia clientes que não são browser (HTTP 406).
 - Pessoas: Dan Abramov (overreacted), Kent C. Dodds, Julia Evans, Martin Fowler, Simon Willison, Matt Pocock
 - Ecossistema: Effect, Bun, TypeScript (devblogs)
 
@@ -28,7 +28,13 @@ Decisões tomadas em 2026-09-10. Cada item tem a decisão e por quê. No fim, o 
 
 **Falhas.** Feed quebrado: pula, loga, vai pro rodapé do email. OpenRouter ou Resend: retry 3x com backoff exponencial; se ainda falhar, o job falha e o Actions avisa. Não manda email sem curadoria.
 
-**Teste local: `DRY_RUN=1`** grava `out/newsletter.html` em vez de enviar. `bun test` cobre a janela de datas e o parse da resposta do modelo.
+**Teste local: `DRY_RUN=1`** troca o `Mailer` do Resend por um que grava `out/newsletter.html`, e nesse modo as configs do Resend não são exigidas. `bun test` cobre a janela de datas, o parse da resposta do modelo e o `Scorer` com modelo falso.
+
+**Organização: serviços do Effect.** `FeedReader`, `Scorer`, `Mailer` e `Uuid` são `Context.Service` com `make` e `layer`; `main.ts` só compõe. Lógica pura fica em `newsletter.ts`. Erros tipados por serviço (`FeedReadError`, `ScoreError`, `MailSendError`) com `cause` preservado. Arquivo, relógio e UUID vêm de `FileSystem`, `DateTime.now` e um serviço `Uuid`, então nenhum teste toca disco, rede ou relógio real. Convenções copiadas do exemplo oficial `Effect-TS/examples/http-server` e do doc de convenções do t3code. Biome pra lint e formatação, CI roda `bun run check` em PR e push na main.
+
+**Fora do Effect, de propósito:** `rss-parser` (Effect não tem parser de XML) e o HTML do email em template string (o `Template` do Effect é pra resposta HTTP em streaming).
+
+**Envio idempotente.** O POST do Resend leva um `Idempotency-Key` gerado por execução, então o retry não duplica o email.
 
 **Stack: Bun + Effect 4 (rc.113).** O repo do Effect está vendorizado em `.vendor/effect` como referência de API, porque a doc online ainda é majoritariamente v3. Única dependência nova além do ecossistema Effect: `rss-parser`.
 
