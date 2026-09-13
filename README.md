@@ -1,68 +1,132 @@
-# effect-crawler
+# Radar
 
-Newsletter semanal, pessoal, com os posts de tech blogs que valem a pena ler.
+Engineering blogs worth reading, and an email with only the posts that match
+what you actually work on.
 
-## Que problema resolve
+Live at **radar.luizcastro.dev**.
 
-Acompanhar 20 blogs de engenharia dá trabalho: ou você abre cada um, ou assina tudo e afoga em post irrelevante. Este projeto lê os feeds RSS dos blogs que eu escolhi, pede pra um modelo de linguagem pontuar cada post contra o meu perfil de interesses, e me manda por email só o que passou do corte. Uma vez por semana, sem eu fazer nada.
+## The problem
 
-## Como funciona
+Following twenty engineering blogs means either opening twenty tabs or
+subscribing to everything and drowning. Radar reads the feeds, asks a language
+model to score each post against a profile you wrote in your own words, and
+mails you only what clears the bar — daily, weekly or monthly, your choice.
 
-1. Toda segunda, um job no GitHub Actions roda o script.
-2. O script lê os feeds listados em `src/feeds.ts` e pega os posts dos últimos 7 dias.
-3. Manda título e resumo de todos os posts, de uma vez, pro modelo (via OpenRouter) junto com o `profile.md`. O modelo devolve nota de 0 a 10 e uma linha de justificativa por post.
-4. Posts com nota 7 ou mais entram no email, ordenados por nota. Feeds que falharam aparecem num rodapé.
-5. O email sai pelo Resend.
+## How it works
 
-Detalhes e decisões em [docs/PLAN.md](docs/PLAN.md).
+1. Every hour, a durable cron asks the database who is overdue.
+2. For each of them, a workflow reads their feeds, drops anything they were
+   already sent, and caps the batch at 150 posts.
+3. Title and summary of all of them go to the model in one call, together with
+   the reader's profile. It returns a 0–10 score and one line of reasoning per
+   post.
+4. Posts scoring 7 or higher become the email, ordered by score. A round where
+   nothing clears the bar sends nothing.
+5. The email goes out through Resend.
 
-## Rodando local
+Each of those steps is a workflow activity, so a crash halfway through resumes
+after the last completed step instead of paying for the model twice or sending
+the same edition again.
+
+## Running it
 
 ```sh
 bun install
-cp .env.example .env   # preencher OPENROUTER_API_KEY (Resend só é preciso pra enviar de verdade)
-bun run dev            # gera out/newsletter.html em vez de enviar
-bun run send           # envia de verdade
-bun run check          # typecheck + lint + testes
+cp .env.example .env        # fill in SECRET_KEY and OPENROUTER_API_KEY
+docker compose up -d        # Postgres on 5432
+bun run dev                 # http://localhost:3000, emails written to out/
 ```
 
-`LOOKBACK_DAYS=14` amplia a janela (útil se uma semana falhou).
+`bun run dev` sets `DRY_RUN=1`, so editions land in `out/` as HTML instead of
+being sent, and the Resend configuration is not required.
 
-## Estrutura
+| Command | What it does |
+|---|---|
+| `bun run check` | typecheck, lint, tests |
+| `bun run feeds:check` | fetches every curated feed; CI gate for the blogroll |
+| `bun run feeds:resolve "<name> <url>"` | resolves an address to a feed URL |
+| `bun run scripts/send-now.ts` | runs the hourly dispatch immediately |
+
+## Layout
 
 ```
 src/
-  main.ts          compõe os serviços e roda
-  config.ts        variáveis de ambiente
-  feeds.ts         lista de blogs
-  newsletter.ts    lógica pura: janela de datas, corte, prompt, HTML
-  FeedReader.ts    lê e parseia os feeds
-  Scorer.ts        pontua os posts via OpenRouter
-  Mailer.ts        envia (Resend) ou grava em out/ (dry-run)
-  Uuid.ts          gera a chave de idempotência do envio
+  main.ts          the entrypoint: launch the composed layers
+  layers.ts        how the process is wired together
+  config.ts        environment variables
+  domain.ts        frequency, feed health, period keys, the caps
+  curation.ts      the blogroll, and why some blogs are not on it
+  migrations.ts    schema history
+
+  web.ts           HTTP routes
+  pages.ts         the pages and the transactional emails
+  html.ts          escaping-by-default templates and the stylesheet
+
+  workflows.ts     sending an edition, resolving a feed, the hourly cron
+  Repo.ts          every database query
+  Tokens.ts        signed confirm / sign-in / unsubscribe links
+
+  FeedReader.ts    reads and parses feeds
+  FeedResolver.ts  free text to a canonical feed URL
+  SafeHttp.ts      the guard around fetching URLs strangers typed
+  Scorer.ts        scores posts through OpenRouter
+  Mailer.ts        sends through Resend, or writes to out/
+  newsletter.ts    pure logic: date window, cut, prompt, email HTML
 ```
 
-Arquivo com inicial maiúscula é um serviço do Effect (`Context.Service` com `make` e `layer`). Minúscula é entrypoint, config ou função pura. Convenções seguidas (as mesmas do exemplo oficial da Effect e do t3code):
+A capitalised file is an Effect service (`Context.Service` with `make` and
+`layer`). Lowercase is an entrypoint, configuration, or pure functions.
 
-- Imports por namespace e subpath: `import * as Effect from "effect/Effect"`.
-- Um módulo por serviço, nesta ordem: imports, erros, tag do serviço com a interface inline, `make`, `layer`.
-- Erros são `Schema.TaggedError` com atributos estruturados e o erro original em `cause`.
-- Dependências de ambiente (arquivo, relógio, HTTP, UUID) vêm de serviços do Effect, nunca de global. Por isso os testes rodam sem disco e sem rede.
+Conventions, following the official Effect example and the t3code notes:
 
-## Configuração
+- Namespace and subpath imports: `import * as Effect from "effect/Effect"`.
+- One module per service, in this order: imports, errors, the service tag with
+  its interface inline, `make`, `layer`.
+- Errors are `Schema.TaggedError` with structured fields and the original cause
+  kept in `cause`.
+- Anything environmental — the filesystem, the clock, HTTP, UUIDs — arrives as
+  a service, never from a global. That is why the tests touch no disk, no
+  network and no real clock.
 
-| Variável | O que é |
+## Architecture
+
+One Bun process on Railway, alongside Railway Postgres. It serves the site,
+runs the scheduler, and runs the workers, all sharing a connection pool and a
+shutdown. Durability comes from `effect/unstable/workflow` on a single-node
+cluster (`SingleRunner`), so workflow state lives in Postgres and survives a
+restart or a deploy.
+
+Migrations run at startup: ours from `src/migrations.ts`, and the cluster's own
+from the SQL message storage.
+
+The reasoning behind each of these choices is in [docs/DECISIONS.md](docs/DECISIONS.md).
+
+## Configuration
+
+| Variable | What it is |
 |---|---|
-| `OPENROUTER_API_KEY` | chave do OpenRouter |
-| `OPENROUTER_MODEL` | modelo usado pra pontuar. Default: `deepseek/deepseek-v4.1-flash` |
-| `RESEND_API_KEY` | chave do Resend |
-| `NEWSLETTER_TO` | destinatários, um ou vários separados por vírgula |
-| `LOOKBACK_DAYS` | janela de posts, em dias. Default: 7 |
-| `DRY_RUN` | se `1`, grava HTML em `out/` e não envia. Nesse modo `RESEND_API_KEY` e `NEWSLETTER_TO` não são exigidas |
+| `DATABASE_URL` | Postgres connection string |
+| `SECRET_KEY` | signs every confirmation, sign-in and unsubscribe link |
+| `OPENROUTER_API_KEY` | OpenRouter key |
+| `OPENROUTER_MODEL` | scoring model. Default: `deepseek/deepseek-v4.1-flash` |
+| `RESEND_API_KEY` | Resend key |
+| `MAIL_FROM` | sender address on the verified domain |
+| `APP_URL` | public base URL, used to build the links inside emails |
+| `PORT` | HTTP port. Default: 3000 |
+| `MONTHLY_SCORING_CALLS` | ceiling on model calls per month; past it nothing is sent |
+| `ALERT_TO` | who hears about it when the ceiling is hit |
+| `DRY_RUN` | `1` writes editions to `out/` and sends nothing |
 
-No GitHub Actions, as três chaves ficam em Secrets do repo.
+## Contributing to the blogroll
 
-## Ajustando o que chega
+The curated list is [`src/curation.ts`](src/curation.ts). Adding a blog is a
+pull request: run `bun run feeds:resolve "Name https://theblog.example"` to get
+the entry, add a one-line description saying what makes it worth reading, and
+open the PR. CI fetches every feed in the list before it can merge.
 
-- Adicionar ou remover blog: `src/feeds.ts`
-- Mudar o que conta como relevante: `profile.md`
+`src/curation.ts` also records the blogs that were deliberately left out, and
+why — check there before re-adding one.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

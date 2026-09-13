@@ -6,6 +6,7 @@
       "dependencies": {
         "@effect/ai-openrouter": "4.0.0-rc.113",
         "@effect/platform-bun": "4.0.0-rc.113",
+        "@effect/sql-pg": "4.0.0-rc.113",
         "effect": "4.0.0-rc.113",
         "rss-parser": "^3.13.0",
       },
@@ -40,6 +41,8 @@
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-rc.113", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-rc.113" }, "peerDependencies": { "effect": "^4.0.0-rc.113" } }, "sha512-EOn8doDVaiizfTpdmtRS0SZLAAt19yyHFKg+aV8YXJreNDYqXQLEt+/ThiEOurDimApVYhn2NZW52OJrZlybQw=="],
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-rc.113", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.3" }, "peerDependencies": { "effect": "^4.0.0-rc.113" } }, "sha512-EPCfjvKlHmNDgqIlT85P1OcgNUNvRxNtBpTFOz1UGHwNJe6Ap7rP93Rue7kzFUeplQMy6EfoZEH4CJR4N0nJ1g=="],
+
+    "@effect/sql-pg": ["@effect/sql-pg@4.0.0-rc.113", "", { "peerDependencies": { "effect": "^4.0.0-rc.113" } }, "sha512-xsAbmxsR5sC6Pc/38nB4/rBi1co4aCC7e4T95sVy8EhWA9NRheimtiN05EyhTKZwX1C0T2gquainQwCuQYuKuA=="],
 
     "@types/bun": ["@types/bun@1.4.2", "", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
 

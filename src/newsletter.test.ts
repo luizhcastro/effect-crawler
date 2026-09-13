@@ -14,19 +14,19 @@ const post = (publishedAt: string | undefined, id = 0): Post => ({
   publishedAt: publishedAt === undefined ? Option.none() : DateTime.make(publishedAt),
 })
 
-test("janela de 7 dias", () => {
+test("seven-day window", () => {
   expect(isRecent(post("2026-09-10T00:00:00Z"), 0, now, 7)).toBe(true)
   expect(isRecent(post("2026-09-01T00:00:00Z"), 0, now, 7)).toBe(false)
   expect(isRecent(post("2026-09-20T00:00:00Z"), 0, now, 7)).toBe(false)
 })
 
-test("sem data (ou data inválida): só os 5 primeiros do feed", () => {
+test("no date (or an unparsable one): only the first five of the feed", () => {
   expect(isRecent(post(undefined), 4, now, 7)).toBe(true)
   expect(isRecent(post(undefined), 5, now, 7)).toBe(false)
   expect(isRecent(post("lixo"), 0, now, 7)).toBe(true)
 })
 
-test("resposta do modelo: valida e corta em 7", () => {
+test("model answer: validated, and cut at 7", () => {
   const scores = Schema.decodeUnknownSync(Scores)({
     scores: [
       { id: 0, score: 9, reason: "a" },

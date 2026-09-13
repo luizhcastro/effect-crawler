@@ -13,3 +13,15 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run check
+
+  # The blogroll is changed by pull request, so the gate is here: a feed that
+  # does not answer never reaches main. Separate job because it talks to the
+  # open internet and a blog being down is not a reason to block a code change.
+  feeds:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run feeds:check

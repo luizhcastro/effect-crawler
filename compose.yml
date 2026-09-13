@@ -1,0 +1,17 @@
+# Postgres for local development. `bun run dev` expects it on 5432.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radar
+      POSTGRES_DB: radar
+    ports: ["5432:5432"]
+    volumes: ["radar-pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  radar-pg:
